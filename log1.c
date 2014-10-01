@@ -1,5 +1,6 @@
 /* pthread test 8: Producer-Consumer */
-/* with pthread, semaphore, mutex... */
+/* with named pipe, pthread, semaphore */
+/* set "end" to finish reading pipe  */
 
 #include<stdio.h>
 #include<stdlib.h>
@@ -18,11 +19,11 @@
 #define DTL   5.0 	  // Delay Time Level
 
 const char *log_path="lf1"; // path of the log file
-const char *mode="w";  // for file open mode
-// FILE *fp=NULL;
-int fd;  // pipe
+const char *mode="w";  // for log file open mode
+int fd;  // for pipe
 time_t end_time;   // time for thread
 sem_t mutex, full, avail;  // for semaphore
+const char *end="   --- the end ---"; // to end the pipe read thread
 
 void *producer1(void *arg)
 {
@@ -88,7 +89,15 @@ void *producer2(void *arg)
 	sem_post(&full);
 	sem_post(&mutex);
    }
+
+sleep(2);
 printf("\n !!! When Pro2 end, produce itmes: %d !!!\n",i-1);
+// set info to finish consumer.
+strncpy(log,end,UNIT_SIZE);
+if((real_write=write(fd,log,UNIT_SIZE))==-1)
+{  if(errno==EAGAIN)  printf("FIFO not ready!\n"); }
+else printf("\n...write the end info...\n");
+
    pthread_exit(NULL);
 }
 
@@ -120,7 +129,7 @@ void *consumer(void *arg)
 	printf("Read %s from FIFO!\n",read_buffer);
 	fprintf(fp,"%s\n",read_buffer);
 	fflush(fp);
-	printf("This info has been written to file successfully.\n");
+//	printf("This info has been written to file successfully.\n");
 	
 	sem_post(&avail);
 	sem_post(&mutex);
@@ -134,36 +143,14 @@ sleep(3);
    while((read_size=read(fd,read_buffer,UNIT_SIZE))==UNIT_SIZE)
    {
 	printf("\n>>> After Time up, read (%d) bytes from FIFO.\n",read_size);
-	printf(">>> Read from FIFO >>> %s\n",read_buffer);
+	printf("    Info Read from FIFO >>> %s\n",read_buffer);
 	fprintf(fp,"%s\n",read_buffer);
 	fflush(fp);
-	printf("This info has been written to file successfully.\n");
+//	printf("This info has been written to file successfully.\n");
+// for break
+	if(strcmp(read_buffer,end)==0) break;
 	memset(read_buffer,0,UNIT_SIZE); read_size=0;
-printf("   !!! set read_buffer & read_size to 0 !!! \n");
    }
-
-printf("11111111");
-/*
-   while(read_size==UNIT_SIZE)
-   {
-
-	sem_wait(&full);
-	sem_wait(&mutex);
-	memset(read_buffer,0,UNIT_SIZE);
-	if((read_size=read(fd,read_buffer,UNIT_SIZE))==-1)
-	{
-	   if(errno==EAGAIN)
-		printf("No data in buffer.\n");
-	}
-	printf("\n>>> After Time up, read (%d) bytes from FIFO.\n",read_size);
-	printf(">>> Read from FIFO >>> %s\n",read_buffer);
-	fprintf(fp,"%s\n",read_buffer);
-	fflush(fp);
-	printf("This info has been written to file successfully.\n");
-	sem_post(&avail);
-	sem_post(&mutex);
-   }
-*/
 
    fclose(fp);
    pthread_exit(NULL);
@@ -178,9 +165,6 @@ int main()
 
    srand(time(NULL));
    end_time=time(NULL)+RUN_TIME;
-
-//   if((fp=fopen(log_path, mode))==NULL)
-//   { printf("Log File Open Err!\n"); exit(1);}
 
 // create named pipe
    if((mkfifo(MYFIFO,O_CREAT|O_EXCL)<0)&&(errno!=EEXIST))
@@ -225,11 +209,10 @@ printf("\n > Consumer finish! <\n");
 //   wait();
    close(fd);
 
-printf("\n\n  --- THE END ---\n ");
+printf("\n\n  --- THE END ---\n\n ");
  
-//unlink(MYFIFO);  // Del the file when all threads end
+unlink(MYFIFO);  // Del the pipe file when all threads end
 
-//   fclose(fp);
    return 0;
 }
 
